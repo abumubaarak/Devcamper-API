@@ -1,31 +1,44 @@
-const express = require('express')
-const dotenv= require('dotenv')
-const morgan= require('morgan')
-const logger=require('./middleware/logger')
+const express = require("express");
+const dotenv = require("dotenv");
+const colors = require("colors");
+const morgan = require("morgan");
+const errorHandler = require("./middleware/error");
 
-const bootcamps=require('./routes/bootcamps')
+const connectDB = require("./config/db");
+const logger = require("./middleware/logger");
 
 ///LOad ENV
-dotenv.config({path:'./config/config.env'})
+dotenv.config({ path: "./config/config.env" });
 
+const bootcamps = require("./routes/bootcamps");
+const courses = require("./routes/courses");
 
-const app= express()
+connectDB();
 
+const app = express();
 
-if(process.env.NODE_ENV==='development'){
-    app.use(morgan('dev'))
+app.use(express.json());
 
+if (process.env.NODE_ENV === "development") {
+  app.use(morgan("dev"));
 }
- 
+
+app.use("/api/v1/bootcamps", bootcamps);
+app.use("/api/v1/courses",courses);
+app.use(errorHandler);
 
 
+const PORT = process.env.PORT || 5000;
 
-app.use('/api/v1/bootcamps',bootcamps)
+const server = app.listen(
+  PORT,
+  console.log(
+    `Server running in ${process.env.NODE_ENV} mode on port ${PORT}`.yellow.bold
+  )
+);
 
+process.on("unhandledRejection", (err, promise) => {
+  console.log(`Error: ${err.message}`.red.bold);
 
-
-
-const PORT =process.env.PORT || 5000
-
-app.listen(PORT, 
-    console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`))
+  server.close(() => process.exit(1));
+});
