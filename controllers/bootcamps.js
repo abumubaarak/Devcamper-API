@@ -1,6 +1,6 @@
 const geocoder = require("../utills/geocoder");
 const Bootcamp = require("../model/Bootcamp");
-
+const path = require("path");
 const ErrorResponse = require("../utills/errorResponse");
 const asyncHandler = require("../middleware/async");
 
@@ -8,79 +8,7 @@ const asyncHandler = require("../middleware/async");
 // @route  GET /api/v1/bootcamps
 // @access Public
 exports.getBootcamps = asyncHandler(async (req, res, next) => {
-  let query;
-
-  const reqQuery = { ...req.query };
-
-  //field to exclude
-  const removeFields = ["select", "sort", "page", "limit"];
-
-  console.log(reqQuery);
-
-  //Loop over removeFields and delete from them
-  removeFields.forEach((param) => delete reqQuery[param]);
-
-  console.log(reqQuery);
-
-  let queryStr = JSON.stringify(reqQuery);
-
-  
-  //Create operations
-  queryStr = queryStr.replace(
-    /\b(gt|gte|lt|lte|in)\b/g,
-    (match) => `$${match}`
-  );
-
-  query = Bootcamp.find(JSON.parse(queryStr)).populate("courses");
-
-  //Selet fields
-  if (req.query.select) {
-    const fields = req.query.select.split(",").join(" ");
-    query = query.select(fields);
-  }
-
-  if (req.query.sort) {
-    const sort = req.query.sort.split(",").join(" ");
-    query = query.sort(sort);
-  } else {
-    query = query.sort("-createdAt");
-  }
-
-  //Pagination
-  const page = parseInt(req.query.page, 10) || 1;
-  const limit = parseInt(req.query.limit, 10) || 25;
-  const startIndex = (page - 1) * limit;
-  const endIndex = page * limit;
-  const total = await Bootcamp.countDocuments();
-
-  query = query.skip(startIndex).limit(limit);
-
-  //Pagegination Result
-
-  const pagination = {};
-
-  if (endIndex < total) {
-    pagination.next = {
-      page: page + 1,
-      limit,
-    };
-  }
-
-  if (startIndex > 0) {
-    pagination.prev = {
-      page: page - 1,
-      limit,
-    };
-  }
-
-  const bootcamp = await query;
-
-  res.status(200).json({
-    success: true,
-    count: bootcamp.length,
-    data: bootcamp,
-    pagination,
-  });
+  res.status(200).json(res.advancedResults);
 });
 
 // @desc   GET Single bootcamps
@@ -102,6 +30,24 @@ exports.getBootcamp = asyncHandler(async (req, res, next) => {
 // @route  POST /api/v1/bootcamps/
 // @access Private
 exports.createBootcamp = asyncHandler(async (req, res, next) => {
+  //Add user to re.body
+
+  console.log(req.user);
+
+  req.body.user = req.user.id;
+
+  const publishedBootcamp = await Bootcamp.findOne({ user: req.user.id });
+
+  //if the user is not an admin, they can  only add one bootcamp
+  if (publishedBootcamp && req.user.role !== "admin") {
+    return next(
+      new ErrorResponse(
+        `The user with ID ${req.user.id} has already published a bootcamp`,
+        404
+      )
+    );
+  }
+
   const bootcamp = await Bootcamp.create(req.body);
 
   res.status(201).json({
@@ -114,16 +60,29 @@ exports.createBootcamp = asyncHandler(async (req, res, next) => {
 // @route  PUT /api/v1/bootcamps/:id
 // @access Private
 exports.updateBootcamp = asyncHandler(async (req, res, next) => {
-  const bootcamp = await Bootcamp.findByIdAndUpdate(req.params.id, req.body, {
-    new: true,
-    runValidators: true,
-  });
+  let  bootcamp = await Bootcamp.findById(req.params.id);
 
   if (!bootcamp) {
     return next(
       new ErrorResponse(`Bootcamp not found with id of ${req.params.id}`, 404)
     );
   }
+
+  //Make sure user isbootcamp owner
+  if (bootcamp.user.toString() !== req.user.id && req.user.role !== "admin") {
+    return next(
+      new ErrorResponse(
+        `User ${req.params.id} is not authorized to update this bootcamp`,
+        404
+      )
+    );
+  }
+
+   bootcamp = await Bootcamp.findByIdAndUpdate(req.params.id, req.body, {
+    new: true,
+    runValidators: true,
+  });
+
 
   res.status(200).json({
     success: true,
@@ -143,7 +102,7 @@ exports.deleteBootcamp = asyncHandler(async (req, res, next) => {
     );
   }
 
-  bootcamp.remove()
+  bootcamp.remove();
 
   res.status(200).json({
     success: true,
@@ -176,4 +135,65 @@ exports.getBootcampsInRadius = asyncHandler(async (req, res, next) => {
   res
     .status(200)
     .json({ sucess: true, totalCount: bootcamps.length, data: bootcamps });
+});
+
+// @desc   Upload photo for   bootcamps
+// @route  PUT /api/v1/bootcamps/:id/photo
+// @access Private
+exports.bootcampPhotoUpload = asyncHandler(async (req, res, next) => {
+  const bootcamp = await Bootcamp.findById(req.params.id);
+
+  if (!bootcamp) {
+    return next(
+      new ErrorResponse(`Bootcamp not found with id of ${req.params.id}`, 404)
+    );
+  }
+
+  
+  //Make sure user isbootcamp owner
+  if (bootcamp.user.toString() !== req.user.id && req.user.role !== "admin") {
+    return next(
+      new ErrorResponse(
+        `User ${req.params.id} is not authorized to update this bootcamp`,
+        404
+      )
+    );
+  }
+
+  if (!req.files) {
+    return next(new ErrorResponse(`Plsease upload a file `, 400));
+  }
+
+  const file = req.files.file;
+  if (!file.mimetype.startsWith("image")) {
+    return next(new ErrorResponse(`Plsease upload an image file`, 400));
+  }
+
+  ///Check file size
+
+  if (file.size > process.env.MAX_FILE_UPLOAD) {
+    return next(
+      new ErrorResponse(
+        `Plsease upload an image less than ${process.env.MAX_FILE_UPLOAD}`,
+        400
+      )
+    );
+  }
+
+  //CREATE CUSTOM FILE NAME
+  file.name = `photo_${bootcamp._id}${path.parse(file.name).ext}`;
+
+  file.mv(`${process.env.FILE_UPLOAD_PATH}/${file.name}`, async (err) => {
+    if (err) {
+      console.log(err);
+      return next(new ErrorResponse(`Problem with file upload`, 500));
+    }
+
+    await Bootcamp.findByIdAndUpdate(req.params.id, { photo: file.name });
+
+    res.status(200).json({
+      sucess: true,
+      data: file.name,
+    });
+  });
 });

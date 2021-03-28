@@ -60,7 +60,7 @@ const BootcampSchema= new mongoose.Schema({
             'Business',
             'Other']
     },
-
+    
     averageRating:{
         type:Number,
         min:[1,'Rating must be at least 1'],
@@ -91,7 +91,12 @@ const BootcampSchema= new mongoose.Schema({
       createdAt: {
         type: Date,
         default: Date.now
-      }
+      },
+    user: {
+     type: mongoose.Schema.ObjectId,
+    ref: "User",
+    required: true,
+  }
 },{
 
     toJSON :{virtuals:true},
