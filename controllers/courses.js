@@ -113,7 +113,7 @@ exports.updateCourse = asyncHandler(async (req, res, next) => {
   if (course.user.toString() !== req.user.id && req.user.role !== "admin") {
     return next(
       new ErrorResponse(
-        `User ${req.user.id} is not authorized update a course  ${course._id}`,
+      `User ${req.user.id} is not authorized to update a course  ${course._id}`,
         404
       )
     );

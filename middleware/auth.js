@@ -10,8 +10,12 @@ exports.protect = asyncHandler(async (req, res, next) => {
     req.headers.authorization &&
     req.headers.authorization.startsWith("Bearer")
   ) {
+    //set token from header
     token = req.headers.authorization.split(" ")[1];
   }
+//   }else if(req.coookies.token){
+//     token= req.cookies.token
+// }
 
   if (!token) {
     return next(new ErrorResponse("Not authorize to access this route", 401));
@@ -27,11 +31,7 @@ exports.protect = asyncHandler(async (req, res, next) => {
     next();
   } catch (error) {
     return next(new ErrorResponse("Not authorize to access this route", 401));
-  }
-
-  //   else if(req.coookies.token){
-  //       token= req.cookies.token
-  //   }
+  }  
 });
 
 //Grant Access to specific role

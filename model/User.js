@@ -5,7 +5,6 @@ const jwt = require("jsonwebtoken");
 const UserSchema = new mongoose.Schema({
   name: {
     type: String,
-
     required: [true, "Plsease add a name"],
   },
   email: {
@@ -63,10 +62,6 @@ UserSchema.methods.getResetPasswordToken = function () {
   const resetToken = crypto.randomBytes(20).toString("hex");
 
   //hash token and set to resestpassword
-  this.resetPasswordToken = crypto
-    .createHash("sha256")
-    .update(resetToken)
-    .digest("hex");
 
     //SET EXPIRE
     this.resetPasswordExpire=Date.now()+10*60*1000
